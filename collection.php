@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 opt1, opt2, opt3
                 FROM prod_mods JOIN modifications
                 ON prod_mods.mod_id = modifications.mod_id JOIN options 
-                ON options.id = modifications.mod_id
+                ON options.mod_id = modifications.mod_id
                 WHERE prod_id = $value[id]";
 
             $sql_params = "SELECT name 
