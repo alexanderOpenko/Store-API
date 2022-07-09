@@ -19,7 +19,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conn->query($sql_create_photos_row);
 
     for ($i = 0; $i < count($_FILES['productImages']['name']); $i++) {
-        $opt = 'img' . +($i + 1);
+        if ($i == 0) {
+            $sql_product_main_photo = $conn->prepare("UPDATE Products SET main_photo = ? WHERE id = $last_prod_id");
+            $sql_product_main_photo->bind_param('s', $_FILES['productImages']['name'][$i]);
+
+            if (!$sql_product_main_photo->execute()) {
+                printf("Сообщение ошибки: %s\n", $conn->error);
+            }
+        }
+
+        if ($i == 0) {
+            continue;
+        }
+
+        $opt = 'img' . +$i;
         $opt_value = $_FILES['productImages']['name'][$i];
 
         upload_image($opt_value, $_FILES['productImages']["tmp_name"][$i]);
@@ -38,19 +51,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mods[$i] = array('variant_title' => $_POST['modification'][$i]);
             $mods[$i]['variant_image'] = $_FILES['variant_images']['name'][$i];
 
-            upload_image($_FILES['variant_images']['name'][$i], $_FILES['variant_images']["tmp_name"][$i]);
+            $variant_images_index = $i+1;
+
+            for($vi = 0; $vi < count($_FILES["variant-images-$variant_images_index"]['name']); $vi++) {
+                $name =  $_FILES["variant-images-$variant_images_index"]['name'][$vi];
+                $tmp_name = $_FILES["variant-images-$variant_images_index"]['tmp_name'][$vi];
+                $mods[$i]['images'][] = $name;
+                upload_image($name, $tmp_name);
+            }
 
             $mods[$i]['price'] = $_POST['price'][$i];
             $mods[$i]['qty'] = $_POST['qty'][$i];
             $mods[$i]['options'] = $_POST['options'][$i];
         }
     }
+    print json_encode($mods);
 
     if (count($mods)) {
-        foreach ($mods as $value) {
-            $sql_variants = "INSERT INTO Modifications (mod_title, qty, price, mod_photo)
-            VALUES('$value[variant_title]', '$value[qty]', '$value[price]', '$value[variant_image]')";
-
+        foreach($mods as $value) {
+            $sql_variants = "INSERT INTO Modifications (mod_title, qty, price)
+            VALUES('$value[variant_title]', '$value[qty]', '$value[price]')";
 
             if (!$conn->query($sql_variants)) {
                 printf("Сообщение ошибки: %s\n", $conn->error);
@@ -64,23 +84,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $conn->query($sql_fill_prod_mod_manager);
 
-            $sql_create_opt_row = ("INSERT INTO Options (mod_id)
-             VALUES ($last_mod_id)");
-
-            $conn->query($sql_create_opt_row);
+            $conn->query("INSERT INTO Options (mod_id) VALUES ($last_mod_id)");
             $last_opt_id = $conn->insert_id;
 
             $options = explode(', ', $value['options']);
 
-            for ($i = 0; $i < count($options); $i++) {
-                $opt = 'opt' . +($i + 1);
-                $opt_value = $options[$i];
+            for ($oi = 0; $oi < count($options); $oi++) {
+                $opt = 'opt' . +($oi + 1);
+                $opt_value = $options[$oi];
 
                 $sql_fill_options = $conn->prepare("UPDATE Options SET $opt = ? WHERE id = $last_opt_id");
 
                 $sql_fill_options->bind_param('s', $opt_value);
 
                 $sql_fill_options->execute();
+            }
+
+            $conn->query("INSERT INTO variant_images (mod_id) VALUES ($last_mod_id)");
+            $last_variant_images_id = $conn->insert_id;
+
+            for($mi = 0; $mi < count($value['images']); $mi++) {
+                $opt = 'img' . +($mi + 1);
+                $opt_value = $value['images'][$mi];
+
+                $sql_fill_images = $conn->prepare("UPDATE variant_images SET $opt = ? WHERE id = $last_variant_images_id");
+
+                $sql_fill_images->bind_param('s', $opt_value);
+
+                $sql_fill_images->execute();
             }
         }
     }

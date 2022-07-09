@@ -53,8 +53,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if ($result_mods) {
                 $rows_mod = $result_mods->fetch_all(MYSQLI_ASSOC);
 
+                foreach($rows_mod as $m_key => $m_value) {
+                    $mod_id = $m_value[mod_id];
+
+                    $sql_mod_images = "SELECT img1, img2, img3, img4 FROM variant_images WHERE mod_id = $mod_id";
+                    $result_mod_images = $conn->query($sql_mod_images);
+                    $rows_mod_images = $result_mod_images->fetch_all(MYSQLI_ASSOC);
+
+                    $rows_mod[$m_key]['mod_images'] = $rows_mod_images;
+                }
+
                 for ($i = 0; $i < count($rows_mod); $i++) {
-                    //print json_encode($rows_mod[0]['mod_photo']);
                     $rows_mod[$i]['mod_photo'] = sendImageURL($rows_mod[0]['mod_photo']);
                 }
 
