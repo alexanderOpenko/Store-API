@@ -19,26 +19,33 @@ class Product {
     public $collection;
     public $products = [];
 
-    public function __construct($collection){
+    public function __construct($collection = null){
         $this->collection = $collection;
-        $this->start();
+
+        if ($this->collection) {
+            $this->start();
+        }
     }
 
     public function start () {
         $this->getProducts();
     }
 
-    public function getVariants ($key, $prod_id) {
-        require 'db_connect.php';
+    public function getVariants ($prod_id = null, $mod_id = null) {
+        if (!$mod_id) {
+            $sql_mods = "SELECT mod_title, modifications.mod_id, qty, modifications.price,
+              opt1, opt2, opt3
+              FROM prod_mods JOIN modifications
+              ON prod_mods.mod_id = modifications.mod_id JOIN options
+              ON options.mod_id = modifications.mod_id
+              WHERE prod_id = $prod_id";
+        } else {
+            $sql_mods = "SELECT mod_title, mod_id, qty, price 
+               FROM modifications 
+               WHERE mod_id = $mod_id";
+        }
 
-        $sql_mods = "SELECT mod_title, modifications.mod_id, qty, modifications.price,
-                opt1, opt2, opt3
-                FROM prod_mods JOIN modifications
-                ON prod_mods.mod_id = modifications.mod_id JOIN options
-                ON options.mod_id = modifications.mod_id
-                WHERE prod_id = $prod_id";
-
-        $mods = $this->sql_fetch_all($sql_mods, MYSQLI_ASSOC);
+      $mods = $this->sql_fetch_all($sql_mods, MYSQLI_ASSOC);
 
         if ($mods) {
             //set images for variants
@@ -58,11 +65,16 @@ class Product {
                     }
                 }
             }
-
-            $this->products[$key]['modifications'] = $mods;
         }
 
         return $mods;
+    }
+
+    public function productName ($prod_id) {
+        $sql_prod_name = "SELECT name FROM Products WHERE id = $prod_id";
+        $row = $this->sql_fetch_all($sql_prod_name, MYSQLI_ASSOC);
+
+        return $row[0]['name'];
     }
 
     public function getProducts () {
@@ -77,11 +89,10 @@ class Product {
 
         foreach ($this->products as $key => $value) {
             $this->products[$key]['main_photo'] = sendImageURL($this->products[$key]['main_photo']);
-
-            $mods = $this->getVariants($key, $value[id]);
+            $mods = $this->getVariants($value[id]);
+            $this->products[$key]['modifications'] = $mods;
 
             foreach ($mods as $v) {
-
                 if (!in_array($v[opt1], $opt1)) {
                     $opt1[] = $v[opt1];
                 }
@@ -131,7 +142,12 @@ class Product {
 
     public function sql_fetch_all ($sql_string, $fetch_type) {
         require 'db_connect.php';
+
         $rows = $conn->query($sql_string);
+
+        if (!$rows) {
+            print_r("Errormessage: %s\n", $conn->error);
+        }
 
         return $rows->fetch_all($fetch_type);
     }
