@@ -1,16 +1,13 @@
 <?php
-header('Access-Control-Allow-Origin: http://localhost:3000');
-header('Access-Control-Allow-Credentials: true');
-
 function sendImageURL ($img_name) {
     $base_dir = __DIR__;
-    $doc_root = preg_replace("!${_SERVER['SCRIPT_NAME']}$!", '', $_SERVER['SCRIPT_FILENAME']);
-    $base_url = preg_replace("!^${doc_root}!", '', $base_dir);
+//    $doc_root = preg_replace("!${_SERVER['SCRIPT_NAME']}$!", '', $_SERVER['SCRIPT_FILENAME']);
+//    $base_url = preg_replace("!^${doc_root}!", '', $base_dir);
     $protocol = empty($_SERVER['HTTPS']) ? 'http' : 'https';
     $port = $_SERVER['SERVER_PORT'];
     $disp_port = ($protocol == 'http' && $port == 80 || $protocol == 'https' && $port == 443) ? '' : ":$port";
     $domain = $_SERVER['SERVER_NAME'];
-    $img_url = "${protocol}://${domain}${disp_port}${base_url}/assets/${img_name}";
+    $img_url = "${protocol}://${domain}${disp_port}${$base_dir}/assets/${img_name}";
 
     return $img_url;
 }
@@ -29,6 +26,16 @@ class Product {
 
     public function start () {
         $this->getProducts();
+    }
+    public function sql_fetch_all ($sql_string, $fetch_type) {
+        global $conn;
+
+        $rows = $conn->query($sql_string);
+        if (!$rows) {
+            print json_encode($conn->error);
+        }
+
+        return $rows->fetch_all($fetch_type);
     }
 
     public function getVariants ($prod_id = null, $mod_id = null) {
@@ -139,19 +146,13 @@ class Product {
 
         print json_encode($this->products);
     }
-
-    public function sql_fetch_all ($sql_string, $fetch_type) {
-        require 'db_connect.php';
-
-        $rows = $conn->query($sql_string);
-
-        if (!$rows) {
-            print_r("Errormessage: %s\n", $conn->error);
-        }
-
-        return $rows->fetch_all($fetch_type);
-    }
 }
 
-new Product($_GET['collection']);
+function route ($method, $url_list, $request_data) {
+    if ($method == 'GET') {
+        new Product($request_data->parameters['collection']);
+    } else {
+        //error
+    }
+}
 ?>
