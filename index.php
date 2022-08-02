@@ -5,11 +5,12 @@ header('Access-Control-Allow-Credentials: true');
 header('Content-Type: application/json');
 
 global $conn;
+require 'headers.php';
 
 $conn = new mysqli('localhost:8889', root, root, products);
 
 if ($conn->connect_error) {
-    print json_encode($conn->connect_error);
+    set_HTTP_status('500', 'DB connection error: ' .$conn->connect_error);
 }
 
 function getData($method) {
@@ -42,6 +43,18 @@ $request_data = getData(method());
 
 if (dirname(__FILE__) . '/routes/' . $route . '.php') {
     include_once 'routes/' . $route . '.php';
-    route($method, $url_list, $request_data);
+
+    switch ($route) {
+        case 'cart':
+            cart_route($method, $url_list, $request_data);
+            break;
+        case 'collection':
+            collection_route($method, $url_list, $request_data);
+            break;
+        case 'create_product':
+            product_route($method, $url_list, $request_data);
+            break;
+    }
+
 }
 ?>

@@ -33,9 +33,11 @@ class New_product {
             upload_image($opt_value, $_FILES[$images]["tmp_name"][$i]);
 
             $sql_fill_options = $conn->prepare("UPDATE $table SET $opt = ? WHERE $row = $id");
+
             $sql_fill_options->bind_param('s', $opt_value);
+
             if(!$sql_fill_options->execute()) {
-                print json_encode($conn->error);
+                print json_encode('execute() failed:' . $conn->error);
             }
             }
     }
@@ -124,16 +126,16 @@ class New_product {
 
             $variant_images_index = $key + 1;
 
-            if (count($_FILES["variant-images-$variant_images_index"]['name']) > 1) {
-                $this->set_multiple_images("variant-images-$variant_images_index", 'variant_images', 'mod_id', $last_mod_id);
-            }
+
+            $this->set_multiple_images("variant-images-$variant_images_index", 'variant_images', 'mod_id', $last_mod_id);
         }
     }
 }
 
-function route ($method, $url_list, $request_data) {
+function product_route ($method, $url_list, $request_data) {
     if ($method == 'POST') {
         new New_product($request_data);
+
     } else {
         //error
     }

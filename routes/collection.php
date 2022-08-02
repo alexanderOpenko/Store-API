@@ -148,7 +148,7 @@ class Product {
     }
 }
 
-function route ($method, $url_list, $request_data) {
+function collection_route ($method, $url_list, $request_data) {
     if ($method == 'GET') {
         new Product($request_data->parameters['collection']);
     } else {
