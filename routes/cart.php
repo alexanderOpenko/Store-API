@@ -5,88 +5,115 @@ class Cart extends Product {
     public $warnings = array(
         'cart' => 'Last count of items',
         'qty' => 'Available items count is only: ',
-        'unavailable' => 'out of stock'
+        'unavailable' => 'Out of stock'
     );
 
     public function set_id_session($product, $variant, $qty) {
         if ($variant) {
-            if (!$_SESSION['products_variants']) {
-                $_SESSION['products_variants'];
-            }
-
-            $session = 'products_variants';
+            $cookie = 'products_variants';
             $id = $variant;
             $id_key = 'var_id';
-            $available_qty = $this->getVariants(null, $id)[0]['qty']; //?
+            $prod_name = $this->productInfo($product)['prod_name'];
+            $target_variant = $this->getVariants(null, $id)[0];
+            $available_qty = $target_variant['qty']; //?
 
-            $exist_variant = $this->check_in_session($session, $id, $qty, $id_key, $available_qty);
+            $exist_variant = $this->check_in_cookies_and_update_item_qty(
+                $cookie,
+                $id,
+                'increase',
+                $qty,
+                $id_key,
+                $available_qty,
+                $prod_name,
+                $target_variant
+            );
 
             if (!$exist_variant) {
                 $available = $this->check_availability($available_qty);
                 $warning = $this->check_available_quantity($available_qty, $qty);
+                $variant_index = count($_COOKIE['products_variants']);
 
-                if (!$warning) {
-                    $warning = [];
+                if (!$available) {
+                    set_HTTP_status(400, $this->warnings['unavailable']);
                 }
 
-                $_SESSION['products_variants'][] = array(
+                $item = array(
                     'available' => $available,
                     'prod_id' => $product,
                     'var_id' => $variant,
                     'qty' => $qty,
                     'warning' => $warning
                 );
-            }
 
+                setcookie("products_variants[$variant_index]", json_encode($item));
+                print json_encode(["Add new cart item $prod_name $target_variant[mod_title]"]);
+            }
             return;
         }
-
-        if ($product && !$variant) {
-            if (!$_SESSION['products']) {
-                $_SESSION['products'][] = array('prod_id' => $product, 'qty' => $qty);
-                return;
-            }
-
-            $session = 'products';
-            $id = $product;
-            $id_key = 'prod_id';
-            $available_qty = $this->productInfo($id)[qty];
-
-            $exist_product = $this->check_in_session($session, $id, $qty, $id_key, $available_qty);
-
-            if (!$exist_product) {
-                list($available, $warning) = $this->check_availability($available_qty, $qty);
-                $_SESSION['products'][] = array(
-                    'available' => $available,
-                    'prod_id' => $product,
-                    'qty' => $qty,
-                    'warning' => $warning
-                );
-            }
-        }
+//        if ($product && !$variant) {
+//            if (!$_SESSION['products']) {
+//                $_SESSION['products'][] = array('prod_id' => $product, 'qty' => $qty);
+//                return;
+//            }
+//
+//            $session = 'products';
+//            $id = $product;
+//            $id_key = 'prod_id';
+//            $available_qty = $this->productInfo($id)[qty];
+//
+//            $exist_product = $this->check_in_cookies_and_update_item_qty($session, $id, $qty, $id_key, $available_qty);
+//
+//            if (!$exist_product) {
+//                list($available, $warning) = $this->check_availability($available_qty, $qty);
+//                $_SESSION['products'][] = array(
+//                    'available' => $available,
+//                    'prod_id' => $product,
+//                    'qty' => $qty,
+//                    'warning' => $warning
+//                );
+//            }
+//        }
     }
 
-    public function check_in_session($session, $id, $qty, $id_key, $available_qty) {
-        foreach ($_SESSION["$session"] as $key => $item) {
-            if ($id === $item[$id_key]) {
-                $available = $this->check_availability($available_qty);
-                $warning = $this->check_available_quantity($available_qty, $item['qty']);
-                $_SESSION["$session"][$key]['available'] = $available;
-
-                if (!$warning) {
-                    $_SESSION["$session"][$key]['qty'] += $qty;
-                    $warning = $this->check_available_quantity($available_qty, $_SESSION["$session"][$key]['qty']);
-
-                    if($warning) {
-                        $_SESSION["$session"][$key]['warning'] = $warning[0];
-                    }
-                } else {
-                    $_SESSION["$session"][$key]['warning'] = $warning[0];
-                }
-                return true;
-            }
+    public function check_in_cookies_and_update_item_qty($cookie, $id, $action, $qty, $id_key, $available_qty, $prod_name, $target_variant) {
+        for ($i = 0; $i < count($_COOKIE["$cookie"]); $i++) {
+            $_COOKIE["$cookie"][$i] = json_decode($_COOKIE["$cookie"][$i]);
         }
 
+        foreach ($_COOKIE["$cookie"] as $key => $item) {
+            if ($id !== $item->$id_key) {
+               continue;
+            }
+
+            $available = $this->check_availability($available_qty);
+            $warning = $this->check_available_quantity($available_qty, $item->qty);
+            $item->available = $available;
+            if ($warning) {
+                $item->warning = $warning[0];
+                $this->delete_cookie($cookie, $key);
+                $this->set_cookie($cookie, $key, $item);
+                set_HTTP_status(400, $warning[0]);
+                return true;
+            }
+
+            if ($action === 'increase') {
+                $item->qty += $qty;
+                set_HTTP_status(200, "Update quantity of $prod_name $target_variant[mod_title]");
+            } else {
+                $item->qty -= 1;
+                //?`
+            }
+
+            $this->delete_cookie($cookie, $key);
+            $this->set_cookie($cookie, $key, $item);
+            $warning = $this->check_available_quantity($available_qty, $item->qty);
+            if ($warning) {
+                $item->warning = $warning[0];
+                $this->delete_cookie($cookie, $key);
+                $this->set_cookie($cookie, $key, $item);
+            }
+            return true;
+        }
         return false;
     }
 
@@ -119,62 +146,65 @@ class Cart extends Product {
         }
     }
 
-    public function getCartItems() {
+    public function getCartItems($cookie) {
+//        print_r($_COOKIE["$cookie"]);
+        for ($i = 0; $i < count($_COOKIE["$cookie"]); $i++) {
+            $_COOKIE["$cookie"][$i] = json_decode($_COOKIE["$cookie"][$i]);
+        }
+
         $variants = [];
 
-        foreach ($_SESSION['products_variants'] as $key => $item) {
-            $variant = $this->getVariants(null, $item[var_id])[0];
-            $variants[$key] = $variant;
-            $variants[$key]['warning'] = $item['warning'];
-            $variants[$key]['available'] = $item['available'];
-            $variants[$key]['name'] = $this->productInfo($item[prod_id])[prod_name];
-            $params = $this->productInfo($item[prod_id])[params];
+//        foreach ($_COOKIE["$cookie"] as $key => $item) {
+        for ($i = 0; $i < count($_COOKIE["$cookie"]); $i++) {
+            $item = $_COOKIE["$cookie"][$i];
+            $variant = $this->getVariants(null, $item->var_id)[0];
+            $available_qty = $variant['qty'];
+            $warning = $this->check_available_quantity($available_qty, $item->qty);
+            $available = $this->check_availability($available_qty);
 
-            for ($i = 0; $i < count($params); $i++) {
-                $opt_name = $params[$i]['name'];
-                $opt = 'opt' . ($i + 1);
-                $variants[$key]['options'][] = ["$opt_name" => $variants[$key][$opt]];
+            $variant['warning'] = $warning[0];
+            $variant['available'] = $available;
+            $variant['name'] = $this->productInfo($item->prod_id)['prod_name'];
+            $variant['prod_id'] = $item->prod_id;
+            $params = $this->productInfo($item->prod_id)['params'];
+
+            for ($pi = 0; $pi < count($params); $pi++) {
+                $opt_name = $params[$pi]['name'];
+                $opt = 'opt' . ($pi + 1);
+                $variant['options'][] = ["$opt_name" => $variant[$opt]];
             }
 
-            $i = 1;
+            $oi = 1;
 
             do {
-                $opt = 'opt' . $i;
-                unset($variants[$key][$opt]);
-                $i++;
-            } while ($i <= 3);
+                $opt = 'opt' . $oi;
+                unset($variant[$opt]);
+                $oi++;
+            } while ($oi <= 3);
 
-            $variants[$key]['line_quantity'] = $item[qty];
+            $variant['line_quantity'] = $item->qty;
+            $variants[$i] = $variant;
         }
 
         print json_encode($variants);
     }
 
-    public function relevance_check($session) {
-        foreach ($_SESSION["$session"] as $key => $item) {
-            $available_qty = $this->getVariants(null, $item['var_id'])[0]['qty'];
-            $warning = $this->check_available_quantity($available_qty, $item['qty']);
-            $available = $this->check_availability($available_qty);
+    public function delete_cookie ($cookie, $index) {
+        setcookie("$cookie" . "[$index]", '', time() - 1);
+    }
 
-            if($warning) {
-                $_SESSION["$session"][$key]['warning'] = $warning[0];
-            }
-            $_SESSION["$session"][$key]['available'] = $available;
-        }
+    public function set_cookie ($cookie, $index, $item) {
+        setcookie("$cookie" . "[$index]", json_encode($item));
     }
 }
 
 function cart_route ($method, $url_list, $request_data) {
-    session_start();
-
     $cart = new Cart();
 
     if ($method == 'POST') {
         $cart->set_id_session($request_data['product_id'], $request_data['variant_id'], $request_data['quantity']);
-        $cart->getCartItems();
     } else if ($method == 'GET') {
-        $cart->relevance_check('products_variants');
-        $cart->getCartItems();
+        $cart->getCartItems('products_variants');
     } else if ($method == 'DELETE') {
         print json_encode($request_data->variant_id);
     }
