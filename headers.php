@@ -1,7 +1,6 @@
 <?php
-function set_HTTP_status ($status = '200', $message = null) {
+function set_HTTP_status ($status, $message, $response_code, $body = null) {
     switch ($status) {
-        default:
         case '200':
             $status='HTTP/1.0 200 OK';
             break;
@@ -11,13 +10,18 @@ function set_HTTP_status ($status = '200', $message = null) {
         case '404':
             $status='HTTP/1.0 404 Not found';
             break;
+        case '410':
+            $status='HTTP/1.0 410 Gone';
+            break;
         case '500':
             $status='HTTP/1.0 500 Internal Server Error';
             break;
     }
     header($status);
     if (!is_null($message)) {
-       print json_encode(['message' => $message]);
+       print json_encode(['message' => $message, 'code' => $response_code, 'body' => $body]);
     }
 }
 ?>
+
+
