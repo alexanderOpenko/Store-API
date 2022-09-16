@@ -10,7 +10,52 @@ class Cart extends Product {
     );
 
     public function set_id_session($product, $variant, $qty) {
-        if ($variant) {
+        if ($product && !isset($variant)) {  
+            $cookie = 'products';
+            $id = $product;
+            $id_key = 'prod_id';
+
+            $prod_name = $this->productInfo($product)['prod_name'];
+            $available_qty = 5;
+    
+            $exist_product = $this->check_in_cookies_and_update_item_qty(
+                $cookie,
+                $id,
+                'increase',
+                $qty,
+                $id_key,
+                $available_qty,
+                $prod_name
+            );
+    
+            if ($exist_product) {
+                return;
+            }
+    
+            $available = $this->check_availability($available_qty);
+            $warning = $this->check_available_quantity($available_qty, $qty);
+            $product_index = count($_COOKIE['products']);
+    
+            if (!$available) {
+                set_HTTP_status(400, ['unavailable' => $this->warnings['unavailable']], 0);
+                return;
+            }
+    
+            $item = new stdClass();
+            $item->available = $available;
+            $item->prod_id = $product;
+            $item->qty = $qty;
+            $item->warning = $warning;
+    
+            $_COOKIE["$cookie"][$product_index] = $item;
+    
+            $this->set_cookie('products', $product_index, $item);
+            $body = $this->getCartItems();
+    
+            set_HTTP_status(200, "Add new cart item $prod_name", 10, $body);
+    
+            return;
+           } else {
             $cookie = 'products_variants';
             $id = $variant;
             $id_key = 'var_id';
@@ -38,7 +83,7 @@ class Cart extends Product {
             $variant_index = count($_COOKIE['products_variants']);
 
             if (!$available) {
-                set_HTTP_status(400, $this->warnings['unavailable'], 0);
+                set_HTTP_status(400, ['unavailable' => $this->warnings['unavailable']], 0);
                 return;
             }
 
@@ -49,73 +94,49 @@ class Cart extends Product {
             $item->qty = $qty;
             $item->warning = $warning;
 
-            $_COOKIE["$cookie"][$variant_index] = $item;
-            $this->set_cookie('products_variants', $variant_index, $item);
-            $body = $this->getCartItems('products_variants');
+            // print json_encode($warning)
 
-              set_HTTP_status(200,
-                  "Add new cart item $prod_name $target_variant[mod_title]",
-                  10,
-              $body
-              );
+            $_COOKIE["$cookie"][$variant_index] = $item;
+
+            $this->set_cookie('products_variants', $variant_index, $item);
+            $body = $this->getCartItems();
+
+              set_HTTP_status(200, "Add new cart item $prod_name $target_variant[mod_title]", 10, $body);
 
             return;
         }
-//        if ($product && !$variant) {
-//            if (!$_SESSION['products']) {
-//                $_SESSION['products'][] = array('prod_id' => $product, 'qty' => $qty);
-//                return;
-//            }
-//
-//            $session = 'products';
-//            $id = $product;
-//            $id_key = 'prod_id';
-//            $available_qty = $this->productInfo($id)[qty];
-//
-//            $exist_product = $this->check_in_cookies_and_update_item_qty($session, $id, $qty, $id_key, $available_qty);
-//
-//            if (!$exist_product) {
-//                list($available, $warning) = $this->check_availability($available_qty, $qty);
-//                $_SESSION['products'][] = array(
-//                    'available' => $available,
-//                    'prod_id' => $product,
-//                    'qty' => $qty,
-//                    'warning' => $warning
-//                );
-//            }
-//        }
     }
 
-    public function check_in_cookies_and_update_item_qty($cookie, $id, $action, $qty, $id_key, $available_qty, $prod_name, $target_variant) {
-//        ksort($_COOKIE["$cookie"]);
-        foreach ($_COOKIE["$cookie"] as $key => $item) {
+    public function check_in_cookies_and_update_item_qty ($cookie, $id, $action, $qty, $id_key, $available_qty, $prod_name, $target_variant = null) {
+        foreach ($_COOKIE["$cookie"] as $key => $item) { //if item not found by id then create new cookie. Otherwise increase or decrease
             if ($id !== $item->$id_key) {
                 continue;
             }
+
             $available = $this->check_availability($available_qty);
             $item->available = $available;
 
             if ($action === 'increase') {
-                $warning = $this->check_available_quantity($available_qty, $item->qty);
+                $warning = $this->check_available_quantity($available_qty, $item->qty)[0];
                 if ($warning) {
+                    print_r($warning[0]);
                     $item->warning = $warning[0];
                     $this->delete_cookie($cookie, $key);
                     $this->set_cookie($cookie, $key, $item);
-                    set_HTTP_status(400, $warning[0], 5);
+                    set_HTTP_status(400, $warning, 5);
                     return true;
                 }
 
                 $item->qty += $qty;
 
+                // $warning = $this->check_available_quantity($available_qty, $item->qty);
+                // $item->warning = $warning;
+
                 $this->delete_cookie($cookie, $key);
                 $this->set_cookie($cookie, $key, $item);
-                $body = $this->getCartItems('products_variants');
+                $body = $this->getCartItems();
 
-                set_HTTP_status(200,
-                    "Increased quantity of $prod_name $target_variant[mod_title]",
-                    10,
-                    $body
-                );
+                set_HTTP_status(200, "Increased quantity of $prod_name $target_variant[mod_title]", 10, $body);
             } else {
                 $item->qty -= 1;
                 $item->warning = '';
@@ -123,24 +144,24 @@ class Cart extends Product {
                 if ($item->qty == 0) {
                     $this->delete_cookie($cookie, $key);
                     unset($_COOKIE["$cookie"][$key]);
-                    $body = $this->getCartItems('products_variants');
+                    $body = $this->getCartItems();
 
-                    if(!count($_COOKIE["$cookie"])) {
+                    if(!count($_COOKIE['products_variants']) && !count($_COOKIE['products'])) {
                         set_HTTP_status(200, $this->warnings['empty'], 0, []);
                         break;
                     } else {
                         set_HTTP_status(200, "Deleted cart item $prod_name $target_variant[mod_title]", 10, $body);
                     }
                 } else {
-                    $body = $this->getCartItems('products_variants');
+                    $body = $this->getCartItems();
                     $this->delete_cookie($cookie, $key);
                     $this->set_cookie($cookie, $key, $item);
                     set_HTTP_status(200, "Decreased quantity of $prod_name $target_variant[mod_title]", 10, $body);
                 }
             }
-            return true;
+            return true; //item is found
         }
-        return false;
+        return false; //item is not found
     }
 
     public function check_availability($qty) {
@@ -172,20 +193,35 @@ class Cart extends Product {
         }
     }
 
-    public function getCartItems($cookie) {
-        ksort($_COOKIE["$cookie"]);
+    public function getCartItems() {
+        $products_variants = [];
+        $products = [];
+
+        if (count($_COOKIE['products_variants'])) {
+            ksort($_COOKIE['products_variants']); 
+            $products_variants = $this->getItemsByCookieName('products_variants');
+        }
+
+        if (count($_COOKIE['products'])) {
+            ksort($_COOKIE['products']); 
+            $products = $this->getItemsByCookieName('products');
+        }
+
+        $cart_items = array_merge($products_variants, $products);
+
+        return $cart_items;
+    }
+
+    public function getItemsByCookieName ($cookie) {
+        if ($cookie === 'products_variants') { 
         $variants = [];
-        global $cart_item_price;
-        global $cart_item_warning;
-        global $available_qty;
 
         foreach ($_COOKIE["$cookie"] as $key => $item) {
-            if($item->var_id) {
-                $variant = $this->getVariants(null, $item->var_id)[0];
-                $available_qty = $variant['qty'];
-                $cart_item_price = $variant['price'];
-                $cart_item_warning = $this->check_available_quantity($available_qty, $item->qty);
-            }
+            $variant = $this->getVariants(null, $item->var_id)[0];
+            $available_qty = $variant['qty'];
+            $cart_item_price = $variant['price'];
+            $cart_item_warning = $this->check_available_quantity($available_qty, $item->qty);
+            
             $available = $this->check_availability($available_qty);
 
             if (count($cart_item_warning)) {
@@ -219,6 +255,34 @@ class Cart extends Product {
             $variants[$i] = $variant;
         }
         return $variants;
+    } else {
+        $products = [];
+    
+        foreach ($_COOKIE["$cookie"] as $key => $item) {
+            $product = $this->getProducts($item->prod_id, true)[0];
+            $available_qty = 5;
+
+            $cart_item_warning = $this->check_available_quantity($available_qty, $item->qty);
+            $available = $this->check_availability($available_qty);
+
+            if (count($cart_item_warning)) {
+                $item->warning = $cart_item_warning[0];
+                $this->delete_cookie($cookie, $key);
+                $this->set_cookie($cookie, $key, $item);
+            }
+            $product['available'] = $available;
+            $product['warning'] = $cart_item_warning[0];
+            $product['prod_id'] = $item->prod_id;
+            $product['line_quantity'] = $item->qty;
+            $product['price'] = $product['price'] * $item->qty;
+
+            $i = count($products);
+            $products[$i] = $product;
+        }
+
+        return $products;
+    }
+       
     }
 
     public function delete_cookie ($cookie, $index) {
@@ -235,68 +299,89 @@ class Cart extends Product {
             $_COOKIE["$cookies"][$key] = json_decode($_COOKIE["$cookies"][$key]);
         }
     }
+
+    public function delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant = null) {
+        foreach ($_COOKIE[$cookie] as $key => $item) {
+            if ($id !== $item->$id_key) {
+                continue;
+            }
+            $this->delete_cookie($cookie, $key);
+            unset($_COOKIE["$cookie"][$key]);
+            $body = $this->getCartItems();
+            set_HTTP_status(200, "Deleted cart item $prod_name $target_variant[mod_title]", 10, $body);
+        }
+    }
 }
 
 function cart_route ($method, $url_list, $request_data) {
     $cart = new Cart();
 
-    if ($method == 'POST') {
+    if (count($_COOKIE['products'])) {
+        $cart->decode_cookie('products');
+    }
+    
+    if (count($_COOKIE['products_variants'])) {
         $cart->decode_cookie('products_variants');
+    }
+
+    if ($method == 'POST') {
         $cart->set_id_session($request_data['product_id'], $request_data['variant_id'], $request_data['quantity']);
     } else if ($method == 'GET') {
-        if (!count($_COOKIE["products_variants"])) {
+        if (!count($_COOKIE["products_variants"]) && !count($_COOKIE["products"])) {
             set_HTTP_status(200, $cart->warnings['empty'], 0);
             die();
         }
-        $cart->decode_cookie('products_variants');
-        $variants = $cart->getCartItems('products_variants');
-        set_HTTP_status(200, count($variants) . " items in cart", 10, $variants);
+
+        $cart_items = $cart->getCartItems();
+        set_HTTP_status(200, count($cart_items) . " items in cart", 10, $cart_items);
     } else if ($method == 'PUT') {
-        $cart->decode_cookie('products_variants');
+        //$cookie, $id, $action, $qty, $id_key, $available_qty, $prod_name
         $action = $request_data->action;
         $prod_name = $cart->productInfo($request_data->product_id)['prod_name'];
-        $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
-        $available_qty = $target_variant['qty'];
+
+        if (isset($request_data->variant_id)) {
+            $cookie = 'products_variants';
+            $id = $request_data->variant_id;
+            $id_key = 'var_id';
+            $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
+            $available_qty = $target_variant['qty'];
+        } else {
+            $cookie = 'products';
+            $id = $request_data->product_id;
+            $id_key = 'prod_id';
+            $available_qty = 5;
+        }
 
         $cart->check_in_cookies_and_update_item_qty(
-            'products_variants',
-            $request_data->variant_id,
+            $cookie,
+            $id,
             $action,
             1,
-            'var_id',
+            $id_key,
             $available_qty,
             $prod_name,
             $target_variant
         );
-    } else if
-    ($method == 'DELETE') {
-        $cart->decode_cookie('products_variants');
-        foreach ($_COOKIE['products_variants'] as $key => $item) {
-            if ($request_data->variant_id !== $item->var_id) {
-                continue;
-            }
-                $prod_name = $cart->productInfo($request_data->product_id)['prod_name'];
-                $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
-                $available_qty = $target_variant['qty'];
+    } else if ($method == 'DELETE') {
+        $prod_name = $cart->productInfo($request_data->product_id)['prod_name'];
 
-                if ($request_data->delete_item) {
-                    $cart->delete_cookie($request_data->variant_id, $key);
-                    set_HTTP_status(200, "Deleted cart item $prod_name $target_variant[mod_title]", 10);
-                    return;
-                }
-
-                $cart->check_in_cookies_and_update_item_qty(
-                    'products_variants',
-                    $request_data->variant_id,
-                    'decrease',
-                    1,
-                    'var_id',
-                    $available_qty,
-                    $prod_name,
-                    $target_variant
-                );
+        if (isset($request_data->variant_id)) {
+            $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
         }
-        $cart->getCartItems('products_variants');
+
+        if (isset($request_data->product_id) && isset($request_data->variant_id)) {  
+            $cookie = 'products_variants';
+            $id = $request_data->variant_id;
+            $id_key = 'var_id';
+
+            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
+        } else {
+            $cookie = 'products';
+            $id = $request_data->product_id;
+            $id_key = 'prod_id';
+
+            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
+        }       
     }
 }
 ?>
