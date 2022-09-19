@@ -24,28 +24,27 @@ class New_product {
         }
     }
 
-    public function set_multiple_images ($images, $table, $row, $id) {
-            global $conn;
-
-            for ($i = 1; $i < count($_FILES[$images]['name']); $i++) {
-            $opt = 'img' . $i;
+    public function set_multiple_images($images, $table, $row, $id) {
+        global $conn;
+        print json_encode(count($_FILES[$images]['name']));
+        for ($i = 0; $i < count($_FILES[$images]['name']); $i++) {
+            $opt = 'img' . ($i + 1);
             $opt_value = $_FILES[$images]['name'][$i];
-
             upload_image($opt_value, $_FILES[$images]["tmp_name"][$i]);
 
             $sql_fill_options = $conn->prepare("UPDATE $table SET $opt = ? WHERE $row = $id");
 
-            if(!$sql_fill_options) {
+            if (!$sql_fill_options) {
                 sql_error_handling();
                 return;
             }
 
             $sql_fill_options->bind_param('s', $opt_value);
 
-            if(!$sql_fill_options->execute()) {
+            if (!$sql_fill_options->execute()) {
                 sql_error_handling();
             }
-            }
+        }
     }
 
     public function insert_product () {
@@ -196,7 +195,6 @@ class New_product {
 function product_route ($method, $url_list, $request_data) {
     if ($method == 'POST') {
         new New_product($request_data);
-
     } else {
         //error
     }

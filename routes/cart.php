@@ -196,25 +196,29 @@ class Cart extends Product {
     public function getCartItems() {
         $products_variants = [];
         $products = [];
+        $products_price = 0;
+        $variants_total_price = 0;
 
         if (count($_COOKIE['products_variants'])) {
             ksort($_COOKIE['products_variants']); 
-            $products_variants = $this->getItemsByCookieName('products_variants');
+            list($products_variants, $variants_total_price) = $this->getItemsByCookieName('products_variants');
         }
 
         if (count($_COOKIE['products'])) {
             ksort($_COOKIE['products']); 
-            $products = $this->getItemsByCookieName('products');
+            list($products, $products_price) = $this->getItemsByCookieName('products');
         }
 
         $cart_items = array_merge($products_variants, $products);
+        $total_price = $variants_total_price + $products_price;
 
-        return $cart_items;
+        return array('cart_items' => $cart_items,  'total_price' => $total_price);
     }
 
     public function getItemsByCookieName ($cookie) {
         if ($cookie === 'products_variants') { 
         $variants = [];
+        $variants_total_price = 0;
 
         foreach ($_COOKIE["$cookie"] as $key => $item) {
             $variant = $this->getVariants(null, $item->var_id)[0];
@@ -253,10 +257,14 @@ class Cart extends Product {
             $variant['price'] = $cart_item_price * $item->qty;
             $i = count($variants); //$key is not indexed
             $variants[$i] = $variant;
+
+            $variants_total_price += $variant['price'];
         }
-        return $variants;
+
+        return array($variants, $variants_total_price);
     } else {
         $products = [];
+        $products_price = 0;
     
         foreach ($_COOKIE["$cookie"] as $key => $item) {
             $product = $this->getProducts($item->prod_id, true)[0];
@@ -278,9 +286,11 @@ class Cart extends Product {
 
             $i = count($products);
             $products[$i] = $product;
+
+            $products_price += $product['price'];
         }
 
-        return $products;
+        return array($products, $products_price);
     }
        
     }
@@ -290,7 +300,7 @@ class Cart extends Product {
     }
 
     public function set_cookie ($cookie, $index, $item) {
-        setcookie($cookie . "[$index]", json_encode($item));
+        setcookie($cookie . "[$index]", json_encode($item), time() + 60*60*24*7);
     }
 
     public function decode_cookie ($cookies) {

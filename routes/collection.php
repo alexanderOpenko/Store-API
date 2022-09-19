@@ -27,6 +27,7 @@ class Product {
     public function start () {
         $this->getProducts();
     }
+
     public function sql_fetch_all ($sql_string, $fetch_type) {
         global $conn;
 
@@ -45,11 +46,12 @@ class Product {
               FROM prod_mods JOIN modifications
               ON prod_mods.mod_id = modifications.mod_id JOIN options
               ON options.mod_id = modifications.mod_id
-              WHERE prod_id = $prod_id";
+              WHERE prod_id = $prod_id"; //get all variants of target product
         } else {
-            $sql_mods = "SELECT mod_title, mod_id, qty, price 
-               FROM modifications 
-               WHERE mod_id = $mod_id";
+            $sql_mods = "SELECT mod_title, modifications.mod_id, qty, price, opt1, opt2, opt3
+               FROM modifications JOIN options
+               ON options.mod_id = modifications.mod_id
+               WHERE modifications.mod_id = $mod_id"; //get single variant by
         }
 
       $mods = $this->sql_fetch_all($sql_mods, MYSQLI_ASSOC);
@@ -57,7 +59,7 @@ class Product {
         if ($mods) {
             //set images for variants
             foreach($mods as $m_key => $m_value) {
-                $mod_id = $m_value[mod_id];
+                $mod_id = $m_value['mod_id'];
 
                 $sql_mod_images = "SELECT img1, img2, img3, img4 FROM variant_images WHERE mod_id = $mod_id";
 
@@ -77,39 +79,46 @@ class Product {
         return $mods;
     }
 
-    public function productName ($prod_id) {
+    public function productInfo ($prod_id) {
         $sql_prod_name = "SELECT name FROM Products WHERE id = $prod_id";
-        $row = $this->sql_fetch_all($sql_prod_name, MYSQLI_ASSOC);
+        $prod_row = $this->sql_fetch_all($sql_prod_name, MYSQLI_ASSOC);
 
-        return $row[0]['name'];
+        $sql_prod_params = "SELECT name FROM Params WHERE prod_id = $prod_id";
+        $params_rows = $this->sql_fetch_all($sql_prod_params, MYSQLI_ASSOC);
+
+        return array('prod_name' => $prod_row[0]['name'], 'params' => $params_rows);
     }
 
-    public function getProducts () {
-        $opt1 = [];
-        $opt2 = [];
-        $opt3 = [];
-
-        $sql_prod = "SELECT id, name, main_photo, products.price, collection
+    public function getProducts ($product_id = null, $cart_item = null) {
+        if ($product_id) {
+            $sql_prod = "SELECT id, name, main_photo, products.price, collection
+            FROM Products WHERE id = '$product_id'";
+        } else {
+            $sql_prod = "SELECT id, name, main_photo, products.price, collection
             FROM Products WHERE collection = '$this->collection'";
+        }
 
         $this->products = $this->sql_fetch_all($sql_prod, MYSQLI_ASSOC);
 
         foreach ($this->products as $key => $value) {
+            $opt1 = [];
+            $opt2 = [];
+            $opt3 = [];
             $this->products[$key]['main_photo'] = sendImageURL($this->products[$key]['main_photo']);
-            $mods = $this->getVariants($value[id]);
+            $mods = $this->getVariants($value['id']);
             $this->products[$key]['modifications'] = $mods;
 
             foreach ($mods as $v) {
-                if (!in_array($v[opt1], $opt1)) {
-                    $opt1[] = $v[opt1];
+                if (!in_array($v['opt1'], $opt1)) {
+                    $opt1[] = $v['opt1'];
                 }
 
-                if (!in_array($v[opt2], $opt2)) {
-                    $opt2[] = $v[opt2];
+                if (!in_array($v['opt2'], $opt2)) {
+                    $opt2[] = $v['opt2'];
                 }
 
-                if (!in_array($v[opt3], $opt3)) {
-                    $opt3[] = $v[opt3];
+                if (!in_array($v['opt3'], $opt3)) {
+                    $opt3[] = $v['opt3'];
                 }
             }
 
@@ -123,7 +132,7 @@ class Product {
 
             if ($prod_params) {
                 foreach ($prod_params as $val) {
-                    $this->products[$key]['params'][] = $val[name];
+                    $this->products[$key]['params'][] = $val['name'];
                 }
             }
 
@@ -144,13 +153,22 @@ class Product {
             }
         }
 
-        print json_encode($this->products);
+        if ($cart_item) {
+            return $this->products;
+        } else {
+            print json_encode($this->products); 
+        }
     }
 }
 
 function collection_route ($method, $url_list, $request_data) {
+    $product = new Product;
     if ($method == 'GET') {
-        new Product($request_data->parameters['collection']);
+        if ($request_data->parameters['collection']) {
+            new Product($request_data->parameters['collection']);
+        } else {
+            $product->getProducts($request_data->parameters['product_id']);
+        }
     } else {
         //error
     }

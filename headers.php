@@ -1,5 +1,5 @@
 <?php
-function set_HTTP_status ($status, $message, $response_code, $body = null) {
+function set_HTTP_status ($status, $message, $response_code = null, $body = null) {
     switch ($status) {
         case '200':
             $status='HTTP/1.0 200 OK';
@@ -17,6 +17,7 @@ function set_HTTP_status ($status, $message, $response_code, $body = null) {
             $status='HTTP/1.0 500 Internal Server Error';
             break;
     }
+
     header($status);
     if (!is_null($message)) {
        print json_encode(['message' => $message, 'code' => $response_code, 'body' => $body]);
