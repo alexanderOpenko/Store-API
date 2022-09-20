@@ -8,8 +8,30 @@ class Cart extends Product {
         'unavailable' => 'Out of stock',
         'empty' => 'Cart is empty'
     );
+    
+    public function delete_cookie ($cookie, $index) {
+        setcookie("$cookie" . "[$index]", ' ', [
+        'expires' => time() - 1,
+        'path' => '/',
+        'domain' => 'streeterstore.000webhostapp.com',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'None',
+    ]);
+    }
 
-    public function set_id_session($product, $variant, $qty) {
+    public function set_cookie ($cookie, $index, $item) {
+        setcookie($cookie . "[$index]", json_encode($item), [
+        'expires' => time() + 60*60*24*7,
+        'path' => '/',
+        'domain' => 'streeterstore.000webhostapp.com',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'None',
+    ]);
+    }
+
+    public function set_id_session($product, $variant, $qty, $action) {
         if ($product && !isset($variant)) {  
             $cookie = 'products';
             $id = $product;
@@ -21,7 +43,7 @@ class Cart extends Product {
             $exist_product = $this->check_in_cookies_and_update_item_qty(
                 $cookie,
                 $id,
-                'increase',
+                $action,
                 $qty,
                 $id_key,
                 $available_qty,
@@ -66,7 +88,7 @@ class Cart extends Product {
             $exist_variant = $this->check_in_cookies_and_update_item_qty(
                 $cookie,
                 $id,
-                'increase',
+                $action,
                 $qty,
                 $id_key,
                 $available_qty,
@@ -119,7 +141,6 @@ class Cart extends Product {
             if ($action === 'increase') {
                 $warning = $this->check_available_quantity($available_qty, $item->qty)[0];
                 if ($warning) {
-                    print_r($warning[0]);
                     $item->warning = $warning[0];
                     $this->delete_cookie($cookie, $key);
                     $this->set_cookie($cookie, $key, $item);
@@ -147,7 +168,8 @@ class Cart extends Product {
                     $body = $this->getCartItems();
 
                     if(!count($_COOKIE['products_variants']) && !count($_COOKIE['products'])) {
-                        set_HTTP_status(200, $this->warnings['empty'], 0, []);
+                        set_HTTP_status(200, $this->warnings['empty'], 0, $body);
+                        return true;
                         break;
                     } else {
                         set_HTTP_status(200, "Deleted cart item $prod_name $target_variant[mod_title]", 10, $body);
@@ -160,6 +182,7 @@ class Cart extends Product {
                 }
             }
             return true; //item is found
+            // break;
         }
         return false; //item is not found
     }
@@ -295,14 +318,6 @@ class Cart extends Product {
        
     }
 
-    public function delete_cookie ($cookie, $index) {
-        setcookie("$cookie" . "[$index]", '', time() - 1);
-    }
-
-    public function set_cookie ($cookie, $index, $item) {
-        setcookie($cookie . "[$index]", json_encode($item), time() + 60*60*24*7);
-    }
-
     public function decode_cookie ($cookies) {
 //        print_r($_COOKIE["$cookies"]);
         foreach ($_COOKIE["$cookies"] as $key => $item) {
@@ -334,64 +349,36 @@ function cart_route ($method, $url_list, $request_data) {
         $cart->decode_cookie('products_variants');
     }
 
-    if ($method == 'POST') {
-        $cart->set_id_session($request_data['product_id'], $request_data['variant_id'], $request_data['quantity']);
+    if ($method == 'POST' && $request_data['action'] == 'delete') {
+        $prod_name = $cart->productInfo($request_data['product_id'])['prod_name'];
+
+        if (isset($request_data['variant_id'])) {
+            $target_variant = $cart->getVariants(null, $request_data['variant_id'])[0];
+        }
+
+        if (isset($request_data['product_id']) && isset($request_data['variant_id'])) {  
+            $cookie = 'products_variants';
+            $id = $request_data['variant_id'];
+            $id_key = 'var_id';
+
+            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
+        } else {
+            $cookie = 'products';
+            $id = $request_data['product_id'];
+            $id_key = 'prod_id';
+
+            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
+        }     
+        die();  
+    } else if ($method == 'POST') {
+        $cart->set_id_session($request_data['product_id'], $request_data['variant_id'], $request_data['quantity'], $request_data['action']);
     } else if ($method == 'GET') {
         if (!count($_COOKIE["products_variants"]) && !count($_COOKIE["products"])) {
             set_HTTP_status(200, $cart->warnings['empty'], 0);
-            die();
         }
 
         $cart_items = $cart->getCartItems();
         set_HTTP_status(200, count($cart_items) . " items in cart", 10, $cart_items);
-    } else if ($method == 'PUT') {
-        //$cookie, $id, $action, $qty, $id_key, $available_qty, $prod_name
-        $action = $request_data->action;
-        $prod_name = $cart->productInfo($request_data->product_id)['prod_name'];
-
-        if (isset($request_data->variant_id)) {
-            $cookie = 'products_variants';
-            $id = $request_data->variant_id;
-            $id_key = 'var_id';
-            $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
-            $available_qty = $target_variant['qty'];
-        } else {
-            $cookie = 'products';
-            $id = $request_data->product_id;
-            $id_key = 'prod_id';
-            $available_qty = 5;
-        }
-
-        $cart->check_in_cookies_and_update_item_qty(
-            $cookie,
-            $id,
-            $action,
-            1,
-            $id_key,
-            $available_qty,
-            $prod_name,
-            $target_variant
-        );
-    } else if ($method == 'DELETE') {
-        $prod_name = $cart->productInfo($request_data->product_id)['prod_name'];
-
-        if (isset($request_data->variant_id)) {
-            $target_variant = $cart->getVariants(null, $request_data->variant_id)[0];
-        }
-
-        if (isset($request_data->product_id) && isset($request_data->variant_id)) {  
-            $cookie = 'products_variants';
-            $id = $request_data->variant_id;
-            $id_key = 'var_id';
-
-            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
-        } else {
-            $cookie = 'products';
-            $id = $request_data->product_id;
-            $id_key = 'prod_id';
-
-            $cart->delete_cart_item($cookie, $id, $id_key, $prod_name, $target_variant);
-        }       
     }
 }
 ?>

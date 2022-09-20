@@ -7,7 +7,6 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
 
 global $conn;
 require 'headers.php';
-
 $conn = new mysqli('localhost:8889', 'root', 'root', 'products');
 
 if ($conn->connect_error) {
