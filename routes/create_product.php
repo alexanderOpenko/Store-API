@@ -26,7 +26,7 @@ class New_product {
 
     public function set_multiple_images($images, $table, $row, $id) {
         global $conn;
-        print json_encode(count($_FILES[$images]['name']));
+        // print json_encode(count($_FILES[$images]['name']));
         for ($i = 0; $i < count($_FILES[$images]['name']); $i++) {
             $opt = 'img' . ($i + 1);
             $opt_value = $_FILES[$images]['name'][$i];
@@ -123,6 +123,7 @@ class New_product {
             $this->mods[$i]['options'] = $this->data['options'][$i];
         }
 
+        // print_r($this->mods);
         foreach($this->mods as $key => $value) {
             $options = $value['options'] ? explode(', ', $value['options']) : [];
 
@@ -132,24 +133,24 @@ class New_product {
                 $variants_errors['price'][] = "Variant $value[variant_title] has no price";
             }
 
-            $errors = product_validation('variant', [
-                'variant' => $value['variant_title'],
-                'price' => $value['price'],
-                'qty' => $value['qty'],
-                'options' => $options
-            ]);
+            // $errors = product_validation('variant', [
+            //     'variant' => $value['variant_title'],
+            //     'price' => $value['price'],
+            //     'qty' => $value['qty'],
+            //     'options' => $options
+            // ]);
 
-            if ($errors) {
-                foreach ($errors as $er => $er_value) {
-                    $variants_errors[$er][] = $er_value;
-                }
-                continue;
-            }
+            // if ($errors) {
+            //     foreach ($errors as $er => $er_value) {
+            //         $variants_errors[$er][] = $er_value;
+            //     }
+            //     continue;
+            // }
 
             $sql_variants = $conn->prepare("INSERT INTO Modifications (mod_title, qty, price)
             VALUES(?, ?, ?)");
 
-            $sql_variants->bind_param('sii', $value['variant_title'],$value['qty'], $value['price']);
+            $sql_variants->bind_param('sii', $value['variant_title'], $value['qty'], $value['price']);
 
             if (!$sql_variants->execute()) {
                 print json_encode($conn->error);

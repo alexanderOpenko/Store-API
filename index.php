@@ -25,9 +25,7 @@ function getData($method) {
                 $data->parameters[$key] = $value;
             }
         }
-    } else {
-        return json_decode(file_get_contents('php://input'));
-    }
+    } 
 
     return $data;
 }

@@ -10,25 +10,11 @@ class Cart extends Product {
     );
     
     public function delete_cookie ($cookie, $index) {
-        setcookie("$cookie" . "[$index]", ' ', [
-        'expires' => time() - 1,
-        'path' => '/',
-        'domain' => 'streeterstore.000webhostapp.com',
-        'secure' => true,
-        'httponly' => true,
-        'samesite' => 'None',
-    ]);
+        setcookie("$cookie" . "[$index]", ' ', time() - 1);
     }
 
     public function set_cookie ($cookie, $index, $item) {
-        setcookie($cookie . "[$index]", json_encode($item), [
-        'expires' => time() + 60*60*24*7,
-        'path' => '/',
-        'domain' => 'streeterstore.000webhostapp.com',
-        'secure' => true,
-        'httponly' => true,
-        'samesite' => 'None',
-    ]);
+        setcookie($cookie . "[$index]", json_encode($item), time() + 60*60*24*7);
     }
 
     public function set_id_session($product, $variant, $qty, $action) {
@@ -221,6 +207,7 @@ class Cart extends Product {
         $products = [];
         $products_price = 0;
         $variants_total_price = 0;
+        $items_length = 0;
 
         if (count($_COOKIE['products_variants'])) {
             ksort($_COOKIE['products_variants']); 
@@ -235,7 +222,11 @@ class Cart extends Product {
         $cart_items = array_merge($products_variants, $products);
         $total_price = $variants_total_price + $products_price;
 
-        return array('cart_items' => $cart_items,  'total_price' => $total_price);
+        forEach($cart_items as $item) {
+            $items_length += $item['line_quantity'];
+        }
+
+        return array('cart_items' => $cart_items, 'items_length' => $items_length,  'total_price' => $total_price);
     }
 
     public function getItemsByCookieName ($cookie) {
@@ -377,8 +368,8 @@ function cart_route ($method, $url_list, $request_data) {
             set_HTTP_status(200, $cart->warnings['empty'], 0);
         }
 
-        $cart_items = $cart->getCartItems();
-        set_HTTP_status(200, count($cart_items) . " items in cart", 10, $cart_items);
+        $cart = $cart->getCartItems();
+        set_HTTP_status(200, $cart['items_length'] . " items in cart", 10, $cart);
     }
 }
 ?>
